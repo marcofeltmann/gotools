@@ -1,60 +1,114 @@
 package main
 
 import (
-	"log"
+	"fmt"
 	"os"
-	"os/user"
 	"path/filepath"
 )
 
-
 // Reflects sysexits.h as found at /Library/Developer/CommandLineTools/SDKs/MacOSX10.15.sdk/usr/include/sysexits.h
 const (
-	posixExitOk = 0				// Successful termination
-	posixExitConfiguration = 78	// Some Configuraiton could not be read or set
+	posixExitOk            = 0  // Successful termination
+	posixExitConfiguration = 78 // Some Configuraiton could not be read or set
 )
 
 func main() {
-	currentUser, userRetrievalError := user.Current()
-	if userRetrievalError != nil {
-		log.Panicf("Unable to retrieve user: error %s. Panicking!", userRetrievalError)
-	}
+	configFilePath, outputDirectoryPath := parseArgumentsForPaths()
 
-	userHomeDirectory := currentUser.HomeDir
-	configPath := filepath.Join(userHomeDirectory, ".config/testbundler/sampleconfig.json")
-
-	fileStat, fileCheckError := os.Stat(configPath)
+	fileStat, fileCheckError := os.Stat(configFilePath)
 	if os.IsNotExist(fileCheckError) {
-		log.Printf("No config file found at %s. Skipping.", configPath)
+		fmt.Printf("No config file found at %s. Skipping.", configFilePath)
 		// No file means no config. Sooo happy.
 		os.Exit(posixExitOk)
 	} else if fileStat.IsDir() {
 		// File exists but is a directory. That is a misconfiguration!
-		log.Printf("Unable to read file at %s: got directory instead of JSON file. Aborting!", configPath)
+		fmt.Printf("Unable to read file at %s: got directory instead of JSON file. Aborting!", configFilePath)
 		os.Exit(posixExitConfiguration)
 	}
 
 	//SomeRoutine.SetConfigPath(configPath)
-
-	outputPath := "./dummyout"
-	outputPath, outputDirectoryAbsPathError := filepath.Abs(outputPath)
-	if outputDirectoryAbsPathError != nil {
-		log.Panicf("Unable to get absolute path fo output directroy %s: error %s. Panicking!", outputPath, outputDirectoryAbsPathError)
-	}
-
-	fileStat, fileCheckError = os.Stat(outputPath)
+	fileStat, fileCheckError = os.Stat(outputDirectoryPath)
 
 	if os.IsNotExist(fileCheckError) {
 		// No file means no output. Bäm.
-		log.Printf("Output directory at %s does not exist. Aborting!", outputPath)
+		fmt.Printf("Output directory at %s does not exist. Aborting!", outputDirectoryPath)
 		os.Exit(posixExitConfiguration)
 	} else if !fileStat.IsDir() {
 		// File exists but is a directory. That is a misconfiguration!
-		log.Printf("Unable to use output at %s: wanted directory. Aborting!", outputPath)
+		fmt.Printf("Unable to use output at %s: wanted directory. Aborting!", outputDirectoryPath)
 		os.Exit(posixExitConfiguration)
 	}
 
 	// SomeRoutine.SetOutputDir(outputPath)
 
-	log.Printf("\nsomeRoutine.SetConfigFilePath(\n\t%#v\n)\n\nsomeRoutine.SetOutputDir(\n\t%#v\n)", configPath, outputPath)
+	// SomeRouinte.LinkContent()
+}
+
+func outputHelp() {
+	println(".:Usage:.")
+	println("Chatty version")
+
+	/// go run sample.go configFile ~/.config/testbundler/sampleconfig.json targetDirectory dummyout/
+	appCallPath := os.Args[0]
+
+	appName := filepath.Base(appCallPath)
+
+	fmt.Printf("\t%s configFile path/to/config.json targetDirectory path/to/output/directory\n", appName)
+}
+
+func parseArgumentsForPaths() (configPath string, outputDirectory string) {
+	arguments := os.Args
+
+	configPath = "configFile"
+	outputDirectory = "outDir"
+
+	if len(arguments) != 5 {
+		outputHelp()
+		os.Exit(posixExitOk)
+	}
+
+	expectIndexForConfigPath := -1
+	expectIndexForOutputPath := -1
+
+	for index, argument := range arguments {
+		didFoundArgument := false
+		switch argument {
+		case "configFile":
+			didFoundArgument = true
+			expectIndexForConfigPath = index + 1
+		case "targetDirectory":
+			expectIndexForOutputPath = index + 1
+			didFoundArgument = true
+		}
+
+		if !didFoundArgument {
+			switch index {
+			case expectIndexForConfigPath:
+				configPath = arguments[expectIndexForConfigPath]
+				if configPath == "configFile" || configPath == "targetDirectory" {
+					outputHelp()
+					os.Exit(posixExitConfiguration)
+				}
+				configPath, absPathError := filepath.Abs(configPath)
+				if absPathError != nil {
+					fmt.Printf("Unable to create path from configFile. input %#v produdes error %s", configPath, absPathError)
+					os.Exit(posixExitConfiguration)
+				}
+
+			case expectIndexForOutputPath:
+				outputDirectory = arguments[expectIndexForOutputPath]
+				if outputDirectory == "configFile" || outputDirectory == "targetDirectory" {
+					outputHelp()
+					os.Exit(posixExitConfiguration)
+				}
+				outputDirectory, absPathError := filepath.Abs(outputDirectory)
+				if absPathError != nil {
+					fmt.Printf("Unable to create path from targetDirectory. Input %#v produces error %s", outputDirectory, absPathError)
+					os.Exit(posixExitConfiguration)
+				}
+			}
+		}
+	}
+
+	return
 }
